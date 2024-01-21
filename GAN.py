@@ -42,7 +42,7 @@ class Discriminator(nn.Module):
     def __init__(self):
         super(Discriminator, self).__init__()
 
-        self.model = nn.Sequential(
+        self.conv_layers = nn.Sequential(
             nn.Conv2d(3, 64, kernel_size=4, stride=2, padding=1),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1),
@@ -52,11 +52,17 @@ class Discriminator(nn.Module):
             nn.BatchNorm2d(256),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(256, 1, kernel_size=4, stride=2, padding=1),
-            nn.Sigmoid(),
         )
+        self.flatten = nn.Flatten()
+        # Assuming the output size of the last conv layer is (1, 8, 8), then the flattened size is 1*8*8
+        self.fc = nn.Linear(1 * 8 * 8, 1)
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, img):
-        return self.model(img)
+        x = self.conv_layers(img)
+        x = self.flatten(x)
+        x = self.fc(x)
+        return self.sigmoid(x)
     
 class GANTrainer:
     def __init__(self, generator, discriminator, batch_size=64, latent_dim=100, lr=0.0002, betas=(0.5, 0.999)):
@@ -76,18 +82,22 @@ class GANTrainer:
         # Get the current device (CPU or GPU)
         device = "cuda" if torch.cuda.is_available() else "cpu"
         real_images = real_images.to(device)
-        
+
+        # Prepare labels
+        real_labels = torch.ones(real_images.size(0), 1, device=device)
+        fake_labels = torch.zeros(real_images.size(0), 1, device=device)
+
         # Training Discriminator
         self.opt_disc.zero_grad()
 
-        # Real images with label 1
-        real_labels = torch.ones(real_images.size(0), 1, device=device)
+        # Loss with real images
         real_loss = self.criterion(self.discriminator(real_images), real_labels)
 
-        # Fake images with label 0
-        noise = torch.randn(self.batch_size, self.latent_dim, 1, 1, device=device)
+        # Generate fake images
+        noise = torch.randn(real_images.size(0), self.latent_dim, 1, 1, device=device)
         fake_images = self.generator(noise)
-        fake_labels = torch.zeros(fake_images.size(0), 1, device=device)
+
+        # Loss with fake images
         fake_loss = self.criterion(self.discriminator(fake_images.detach()), fake_labels)
 
         # Update Discriminator
@@ -98,9 +108,12 @@ class GANTrainer:
         # Training Generator
         self.opt_gen.zero_grad()
 
-        # Fooling the discriminator, so we use real labels
-        output = self.discriminator(fake_images)
-        gen_loss = self.criterion(output, real_labels)
+        # Generate a new set of fake images for generator training
+        noise = torch.randn(real_images.size(0), self.latent_dim, 1, 1, device=device)
+        fake_images = self.generator(noise)
+
+        # Fooling the discriminator - using real labels as targets for generator loss
+        gen_loss = self.criterion(self.discriminator(fake_images), real_labels)
 
         # Update Generator
         gen_loss.backward()
@@ -109,12 +122,21 @@ class GANTrainer:
         return gen_loss, disc_loss
 
     def train(self, data_loader, epochs):
+        avg_gen_loss = 0
+        avg_disc_loss = 0
+        count = 0
         for epoch in range(epochs):
             for real_images in data_loader:
                 gen_loss, disc_loss = self.train_step(real_images)
+                
+                count += 1
+                avg_gen_loss += gen_loss.item()
+                avg_disc_loss += disc_loss.item()
+            print(f"Epoch [{epoch + 1}/{epochs}] Avg gen loss: {avg_gen_loss / count:.4f} Avg disc loss: {avg_disc_loss / count:.4f}")
+            avg_gen_loss = 0
+            avg_disc_loss = 0
+            count = 0
 
-                # Logging the losses
-                print(f"Epoch [{epoch}/{epochs}]  Loss D: {disc_loss:.4f}, Loss G: {gen_loss:.4f}")
 
     
     def save_models(self, generator_path, discriminator_path):
@@ -122,7 +144,11 @@ class GANTrainer:
         torch.save(self.discriminator.state_dict(), discriminator_path)
 
 
-def generate_image(generator, latent_dim):
+def generate_image(generatorPath, latent_dim):
+
+    #load the generator
+    generator = Generator(latent_dim)
+    generator.load_state_dict(torch.load(generatorPath))
 
     # Ensure the generator is in evaluation mode
     generator.eval()
@@ -145,3 +171,5 @@ def generate_image(generator, latent_dim):
     plt.imshow(generated_image)
     plt.axis('off')  # Turn off the axis
     plt.show()
+    plt.imsave("sample.png", generated_image)
+

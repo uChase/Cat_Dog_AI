@@ -7,12 +7,11 @@ import matplotlib.pyplot as plt
 import random
 import numpy as np
 
-
-class DogDataset(Dataset):
+class ProcessedDogDataset(Dataset):
     def __init__(self, root_dir, transform=None):
         self.root_dir = root_dir
         self.transform = transform
-        self.image_files = os.listdir(root_dir)
+        self.image_files = [f for f in os.listdir(root_dir) if f.endswith('.png')]
 
     def __len__(self):
         return len(self.image_files)
@@ -26,33 +25,22 @@ class DogDataset(Dataset):
 
         return image
 
+# Use the processed dataset for training
+processed_dataset = ProcessedDogDataset("./ProcessedDog", transform=transforms.ToTensor())
 
-# Define the transformation to apply to the images
-transform = transforms.Compose(
-    [
-        transforms.Resize((128, 128)),
-        transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-    ]
-)
-
-# Create an instance of the DogDataset
-dataset = DogDataset("./Dog", transform=transform)
-
-# Create a data loader to load the images in batches
-batch_size = 32
-data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-
+batch_size = 64
+data_loader = DataLoader(processed_dataset, batch_size=batch_size, shuffle=True)
 
 def imshow(img):
     img = img / 2 + 0.5  # unnormalize
     npimg = img.numpy()
+    img = torch.clamp(img, 0, 1)
     plt.imshow(np.transpose(npimg, (1, 2, 0)))
     plt.show()
 
 
-# Get a random batch of images
+# # Get a random batch of images
 # images = next(iter(data_loader))
 
-# Display a random image
+# # Display a random image
 # imshow(images[random.randint(0, batch_size - 1)])
