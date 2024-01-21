@@ -144,9 +144,12 @@ class GANTrainer:
         torch.save(self.discriminator.state_dict(), discriminator_path)
 
 
-def generate_image(generatorPath, latent_dim):
 
-    #load the generator
+import torchvision.utils as vutils
+
+def generate_image(generatorPath, latent_dim, output_path):
+
+    # Load the generator
     generator = Generator(latent_dim)
     generator.load_state_dict(torch.load(generatorPath))
 
@@ -160,16 +163,6 @@ def generate_image(generatorPath, latent_dim):
     with torch.no_grad():  # No need to track gradients
         generated_image = generator(noise)
 
-    # Move the image to CPU and convert to NumPy
-    generated_image = generated_image.cpu().squeeze(0)
-    generated_image = (generated_image + 1) / 2  # Unnormalize if needed
-    generated_image = generated_image.permute(1, 2, 0).numpy()
-
-    # Clip the values to be between 0 and 1
-    generated_image = np.clip(generated_image, 0, 1)
-
-    plt.imshow(generated_image)
-    plt.axis('off')  # Turn off the axis
-    plt.show()
-    plt.imsave("sample.png", generated_image)
+    # Save the generated image as a PNG file
+    vutils.save_image(generated_image, output_path)
 
